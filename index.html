@@ -10,7 +10,39 @@
 <section class="section" id="gallery"><div class="wrap"><div class="eyebrow">From the expedition</div><h2>Photo journal</h2><p class="muted">Images from the repository's assets folder. The gallery loads automatically as photographs are added.</p><div class="gallery" id="galleryGrid"></div><p class="muted" id="galleryStatus">Checking expedition photographs…</p></div></section></main>
 <footer><strong>LAKE DISTRICT ADVENTURE</strong><p style="margin:8px auto">Two days. Mountains, water and the space in between.</p></footer>
 <script>
-(async()=>{const base='https://api.github.com/repos/favour-moon/brathay-paddle/contents/assets';const gallery=document.getElementById('galleryGrid');const status=document.getElementById('galleryStatus');try{const r=await fetch(base);if(!r.ok)throw Error('Gallery unavailable');const entries=await r.json();const imgs=entries.filter(x=>x.type==='file'&&/\.(jpg|jpeg|png|webp|gif)$/i.test(x.name));if(!imgs.length){status.textContent='No image files found at the top level of assets yet.';return;}const sorted=imgs.sort((a,b)=>a.name.localeCompare(b.name));for(const x of sorted){const img=document.createElement('img');img.src=x.download_url;img.alt=x.name.replace(/[_-]/g,' ').replace(/\.[^.]+$/,'');img.loading='lazy';gallery.appendChild(img)}const dayPhotos=sorted.filter(x=>x.name!=='hero-snow.jpg');const choose=(terms,fallback)=>dayPhotos.find(x=>terms.some(t=>x.name.toLowerCase().includes(t)))||dayPhotos[fallback%dayPhotos.length];for(const [id,terms,n] of [['day1Image',['langdale','horseshoe','fell'],0],['day2Image',['brathay','raft','river','water'],1]]){const photo=choose(terms,n);if(photo)document.getElementById(id).src=photo.download_url}status.textContent=imgs.length+' expedition photograph'+(imgs.length===1?'':'s')+' loaded.'}catch(e){status.textContent='Photographs could not be loaded. Check that the assets folder contains public image files.'}})();
+(async()=>{
+const root='https://api.github.com/repos/favour-moon/brathay-paddle/contents/';
+const gallery=document.getElementById('galleryGrid'),status=document.getElementById('galleryStatus');
+const isPhoto=name=>/\.(jpe?g|png|webp|gif|avif)$/i.test(name);
+async function discover(path,depth=0){
+ if(depth>4)return[];
+ const response=await fetch(root+path,{headers:{Accept:'application/vnd.github+json'}});
+ if(!response.ok)throw new Error('GitHub image listing unavailable ('+response.status+')');
+ const entries=await response.json();
+ if(!Array.isArray(entries))return[];
+ const files=entries.filter(e=>e.type==='file'&&isPhoto(e.name)).map(e=>({name:e.name,path:e.path,url:e.download_url||'https://raw.githubusercontent.com/favour-moon/brathay-paddle/main/'+e.path}));
+ const folders=entries.filter(e=>e.type==='dir');
+ const nested=await Promise.all(folders.map(e=>discover(e.path,depth+1).catch(()=>[])));
+ return files.concat(...nested);
+}
+try{
+ const photos=(await discover('assets')).sort((a,b)=>a.path.localeCompare(b.path));
+ if(!photos.length){status.textContent='No expedition photographs found in the repository assets folder.';return}
+ const hero=photos.find(p=>p.path==='assets/hero-snow.jpg');
+ const heroEl=document.getElementById('heroImage');
+ if(hero)heroEl.src='assets/hero-snow.jpg';
+ const galleryPhotos=photos.filter(p=>p.path!=='assets/hero-snow.jpg');
+ for(const p of photos){
+  const img=document.createElement('img');img.src=p.url;img.alt=p.name.replace(/[_-]/g,' ').replace(/\.[^.]+$/,'');img.loading='lazy';
+  img.onerror=()=>img.remove();gallery.appendChild(img);
+ }
+ const choose=(terms,index)=>galleryPhotos.find(p=>terms.some(t=>p.path.toLowerCase().includes(t)))||galleryPhotos[index%galleryPhotos.length]||hero;
+ for(const [id,terms,index] of [['day1Image',['langdale','horseshoe','mountain','fell','snow'],0],['day2Image',['brathay','raft','river','water','windermere'],1]]){
+  const p=choose(terms,index);if(p)document.getElementById(id).src=p.url;
+ }
+ status.textContent=photos.length+' photograph'+(photos.length===1?'':'s')+' found in the repository.';
+}catch(e){status.textContent='Could not list repository photographs. Existing image files have not been deleted.'}
+})();
 </script><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script><script>
 (async()=>{const el=document.getElementById('langdaleMap');try{const res=await fetch('assets/langdale-horseshoe-planned.gpx');if(!res.ok)throw Error('GPX unavailable');const doc=new DOMParser().parseFromString(await res.text(),'application/xml');const points=[...doc.getElementsByTagNameNS('*','rtept')].map(p=>[Number(p.getAttribute('lat')),Number(p.getAttribute('lon'))]).filter(p=>p.every(Number.isFinite));if(points.length<2)throw Error('No route points');const map=L.map(el,{scrollWheelZoom:false});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);const line=L.polyline(points,{color:'#f2a43c',weight:4,opacity:.95}).addTo(map);L.circleMarker(points[0],{radius:7,color:'#fff',fillColor:'#20a66c',fillOpacity:1}).addTo(map).bindPopup('Planned route start');L.circleMarker(points[points.length-1],{radius:7,color:'#fff',fillColor:'#d45a48',fillOpacity:1}).addTo(map).bindPopup('Planned route finish');map.fitBounds(line.getBounds(),{padding:[18,18]});}catch(e){el.textContent='Unable to load interactive route map: '+e.message;el.style.padding='24px'}})();
 </script></body></html>
